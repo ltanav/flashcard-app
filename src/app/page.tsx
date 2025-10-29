@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Box, Button, Checkbox, FormControlLabel, TextField, Typography, List, ListItem, Divider } from '@mui/material';
-import CardForm from '@/components/CardForm';
+import { Box, Button, TextField, Typography, List, ListItem, Divider } from '@mui/material';
 
 interface Card {
   id: string;
   question: string;
   answer: string;
   category_id: string;
+}
+
+interface CardStats {
+  correct: number;
+  wrong: number;
 }
 
 export default function Home() {
@@ -19,6 +23,8 @@ export default function Home() {
   const [userAnswer, setUserAnswer] = useState('');
   const [showRandom, setShowRandom] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [stats, setStats] = useState<{ [key: string]: CardStats }>({});
+  const [insertErrorMsg, setInsertErrorMsg] = useState<string | null>(null);
 
   const fetchCards = async () => {
     setLoading(true);
@@ -27,13 +33,32 @@ export default function Home() {
     setLoading(false);
   };
 
+  const fetchStats = async () => {
+    const { data, error } = await supabase.from('card_attempts').select('*');
+    if (!error && data) {
+      const newStats: { [key: string]: CardStats } = {};
+      data.forEach((attempt: any) => {
+        if (!newStats[attempt.card_id]) newStats[attempt.card_id] = { correct: 0, wrong: 0 };
+        if (attempt.is_correct) newStats[attempt.card_id].correct += 1;
+        else newStats[attempt.card_id].wrong += 1;
+      });
+      setStats(newStats);
+    }
+  };
+
   useEffect(() => {
     fetchCards();
+    fetchStats();
   }, []);
 
   const deleteCard = async (id: string) => {
     const { error } = await supabase.from('cards').delete().eq('id', id);
-    if (!error) setCards(cards.filter(card => card.id !== id));
+    if (!error) {
+      setCards(cards.filter(card => card.id !== id));
+      const newStats = { ...stats };
+      delete newStats[id];
+      setStats(newStats);
+    }
   };
 
   const checkAnswer = async () => {
@@ -43,8 +68,18 @@ export default function Home() {
     const correct = userAnswer.trim().toLowerCase() === currentCard.answer.trim().toLowerCase();
     setFeedback(correct ? 'Correct ✅' : 'Wrong ❌');
     setUserAnswer('');
+    setInsertErrorMsg(null);
 
-    await supabase.from('card_attempts').insert([{ card_id: currentCard.id, is_correct: correct }]);
+    const { data: insertData, error: insertError } = await supabase
+      .from('card_attempts')
+      .insert([{ card_id: currentCard.id, is_correct: correct }]);
+
+    if (insertError) {
+      console.error('Insert attempt error:', insertError);
+      setInsertErrorMsg(`Insert failed: ${insertError.message || JSON.stringify(insertError)}`);
+    } else {
+      fetchStats();
+    }
 
     if (showRandom) {
       const nextIndex = Math.floor(Math.random() * cards.length);
@@ -56,23 +91,26 @@ export default function Home() {
 
   return (
     <Box sx={{ p: 4 }}>
-      <Typography variant="h3" gutterBottom>
-        Flashcard App
-      </Typography>
+      <Typography variant="h3" gutterBottom>Flashcard App</Typography>
 
-      <CardForm categoryId="e9d817ba-82ca-4481-8aae-7c3dbb1fe1c2" onSaved={fetchCards} />
+      {loading && <Typography>Loading...</Typography>}
 
-      {loading ? <Typography>Loading...</Typography> : null}
+      {insertErrorMsg && <Typography color="error">{insertErrorMsg}</Typography>}
 
       <List>
         {cards.map(card => (
-          <ListItem key={card.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography>
-              <strong>{card.question}</strong> → {card.answer}
-            </Typography>
-            <Button variant="contained" color="error" onClick={() => deleteCard(card.id)}>
-              Delete
-            </Button>
+          <ListItem key={card.id} sx={{ display: 'flex', justifyContent: 'space-between', flexDirection: 'column', mb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+              <Typography>
+                <strong>{card.question}</strong> → {card.answer}
+              </Typography>
+              <Button variant="contained" color="error" onClick={() => deleteCard(card.id)}>Delete</Button>
+            </Box>
+            {stats[card.id] && (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                ✅ {stats[card.id].correct} / ❌ {stats[card.id].wrong}
+              </Typography>
+            )}
           </ListItem>
         ))}
       </List>
@@ -82,10 +120,6 @@ export default function Home() {
       {cards.length > 0 && (
         <Box sx={{ mt: 6 }}>
           <Typography variant="h4" gutterBottom>Play Mode</Typography>
-          <FormControlLabel
-            control={<Checkbox checked={showRandom} onChange={(e) => setShowRandom(e.target.checked)} />}
-            label="Show Random"
-          />
           <Box sx={{ mt: 2 }}>
             <Typography variant="h6">Question:</Typography>
             <Typography sx={{ mb: 1 }}>{cards[currentIndex]?.question}</Typography>
