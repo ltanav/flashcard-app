@@ -10,7 +10,7 @@ interface Card {
   category_id: string;
 }
 
-export default function Home() {
+export default function CardList() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,22 +29,18 @@ export default function Home() {
   }, []);
 
   const deleteCard = async (id: string) => {
-    const { error } = await supabase.from('cards').delete().eq('id', id);
-    if (error) {
-      console.error('Error deleting card:', error);
-    } else {
-      setCards(cards.filter(card => card.id !== id));
-    }
+    await supabase.from('cards').delete().eq('id', id);
+    setCards(cards.filter(card => card.id !== id));
   };
 
   return (
     <div>
-      <h1>Flashcard App Test</h1>
+      <h2>Cards</h2>
       {loading ? <p>Loading...</p> : null}
       <ul>
         {cards.map(card => (
           <li key={card.id}>
-            <strong>{card.question}</strong> → {card.answer}{' '}
+            <strong>{card.question}</strong> → {card.answer}
             <button onClick={() => deleteCard(card.id)}>Delete</button>
           </li>
         ))}
