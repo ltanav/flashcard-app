@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Box, Button, Checkbox, FormControlLabel, TextField, Typography, List, ListItem } from '@mui/material';
+import { Box, Button, Checkbox, FormControlLabel, TextField, Typography, List, ListItem, Divider } from '@mui/material';
 import CardForm from '@/components/CardForm';
 
 interface Card {
@@ -15,8 +15,6 @@ interface Card {
 export default function Home() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
-
-
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userAnswer, setUserAnswer] = useState('');
   const [showRandom, setShowRandom] = useState(false);
@@ -25,8 +23,7 @@ export default function Home() {
   const fetchCards = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('cards').select('*');
-    if (error) console.error('Error fetching cards:', error);
-    else setCards(data);
+    if (!error) setCards(data);
     setLoading(false);
   };
 
@@ -34,25 +31,21 @@ export default function Home() {
     fetchCards();
   }, []);
 
-  
   const deleteCard = async (id: string) => {
     const { error } = await supabase.from('cards').delete().eq('id', id);
-    if (error) console.error(error);
-    else setCards(cards.filter(card => card.id !== id));
+    if (!error) setCards(cards.filter(card => card.id !== id));
   };
 
-  const checkAnswer = () => {
-    if (!cards[currentIndex]) return;
+  const checkAnswer = async () => {
+    const currentCard = cards[currentIndex];
+    if (!currentCard) return;
 
-    if (userAnswer.trim().toLowerCase() === cards[currentIndex].answer.trim().toLowerCase()) {
-      setFeedback('Correct ✅');
-    } else {
-      setFeedback('Wrong ❌');
-    }
-
+    const correct = userAnswer.trim().toLowerCase() === currentCard.answer.trim().toLowerCase();
+    setFeedback(correct ? 'Correct ✅' : 'Wrong ❌');
     setUserAnswer('');
 
-    
+    await supabase.from('card_attempts').insert([{ card_id: currentCard.id, is_correct: correct }]);
+
     if (showRandom) {
       const nextIndex = Math.floor(Math.random() * cards.length);
       setCurrentIndex(nextIndex);
@@ -67,15 +60,10 @@ export default function Home() {
         Flashcard App
       </Typography>
 
-      {/* Card creation form */}
-      <CardForm
-        categoryId="e9d817ba-82ca-4481-8aae-7c3dbb1fe1c2"
-        onSaved={fetchCards}
-      />
+      <CardForm categoryId="e9d817ba-82ca-4481-8aae-7c3dbb1fe1c2" onSaved={fetchCards} />
 
       {loading ? <Typography>Loading...</Typography> : null}
 
-      {/* Cards list */}
       <List>
         {cards.map(card => (
           <ListItem key={card.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -89,7 +77,8 @@ export default function Home() {
         ))}
       </List>
 
-      {/* Play mode */}
+      <Divider sx={{ my: 4 }} />
+
       {cards.length > 0 && (
         <Box sx={{ mt: 6 }}>
           <Typography variant="h4" gutterBottom>Play Mode</Typography>
@@ -99,7 +88,7 @@ export default function Home() {
           />
           <Box sx={{ mt: 2 }}>
             <Typography variant="h6">Question:</Typography>
-            <Typography sx={{ mb: 1 }}>{cards[currentIndex].question}</Typography>
+            <Typography sx={{ mb: 1 }}>{cards[currentIndex]?.question}</Typography>
             <TextField
               label="Your Answer"
               value={userAnswer}
