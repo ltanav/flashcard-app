@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { Box, Button, Checkbox, FormControlLabel, TextField, Typography, List, ListItem } from '@mui/material';
 import CardForm from '@/components/CardForm';
 
 interface Card {
@@ -15,14 +16,17 @@ export default function Home() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
 
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [userAnswer, setUserAnswer] = useState('');
+  const [showRandom, setShowRandom] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
   const fetchCards = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('cards').select('*');
-    if (error) {
-      console.error('Error fetching cards:', error);
-    } else {
-      setCards(data);
-    }
+    if (error) console.error('Error fetching cards:', error);
+    else setCards(data);
     setLoading(false);
   };
 
@@ -30,36 +34,83 @@ export default function Home() {
     fetchCards();
   }, []);
 
+  
   const deleteCard = async (id: string) => {
     const { error } = await supabase.from('cards').delete().eq('id', id);
-    if (error) {
-      console.error('Error deleting card:', error);
+    if (error) console.error(error);
+    else setCards(cards.filter(card => card.id !== id));
+  };
+
+  const checkAnswer = () => {
+    if (!cards[currentIndex]) return;
+
+    if (userAnswer.trim().toLowerCase() === cards[currentIndex].answer.trim().toLowerCase()) {
+      setFeedback('Correct ✅');
     } else {
-      setCards(cards.filter(card => card.id !== id));
+      setFeedback('Wrong ❌');
+    }
+
+    setUserAnswer('');
+
+    
+    if (showRandom) {
+      const nextIndex = Math.floor(Math.random() * cards.length);
+      setCurrentIndex(nextIndex);
+    } else {
+      setCurrentIndex((prev) => (prev + 1) % cards.length);
     }
   };
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <h1>Flashcard App Test</h1>
+    <Box sx={{ p: 4 }}>
+      <Typography variant="h3" gutterBottom>
+        Flashcard App
+      </Typography>
 
-      {/* Form to create new card */}
+      {/* Card creation form */}
       <CardForm
-        categoryId="e9d817ba-82ca-4481-8aae-7c3dbb1fe1c2" 
-        onSaved={fetchCards} 
+        categoryId="e9d817ba-82ca-4481-8aae-7c3dbb1fe1c2"
+        onSaved={fetchCards}
       />
 
-      {loading ? <p>Loading...</p> : null}
+      {loading ? <Typography>Loading...</Typography> : null}
 
       {/* Cards list */}
-      <ul>
+      <List>
         {cards.map(card => (
-          <li key={card.id} style={{ marginBottom: '0.5rem' }}>
-            <strong>{card.question}</strong> → {card.answer}{' '}
-            <button onClick={() => deleteCard(card.id)}>Delete</button>
-          </li>
+          <ListItem key={card.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography>
+              <strong>{card.question}</strong> → {card.answer}
+            </Typography>
+            <Button variant="contained" color="error" onClick={() => deleteCard(card.id)}>
+              Delete
+            </Button>
+          </ListItem>
         ))}
-      </ul>
-    </div>
+      </List>
+
+      {/* Play mode */}
+      {cards.length > 0 && (
+        <Box sx={{ mt: 6 }}>
+          <Typography variant="h4" gutterBottom>Play Mode</Typography>
+          <FormControlLabel
+            control={<Checkbox checked={showRandom} onChange={(e) => setShowRandom(e.target.checked)} />}
+            label="Show Random"
+          />
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="h6">Question:</Typography>
+            <Typography sx={{ mb: 1 }}>{cards[currentIndex].question}</Typography>
+            <TextField
+              label="Your Answer"
+              value={userAnswer}
+              onChange={(e) => setUserAnswer(e.target.value)}
+              sx={{ mr: 2 }}
+            />
+            <Button variant="contained" onClick={checkAnswer}>Check Answer</Button>
+            {feedback && <Typography sx={{ mt: 1 }}>{feedback}</Typography>}
+          </Box>
+        </Box>
+      )}
+    </Box>
   );
 }
